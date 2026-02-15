@@ -1,0 +1,100 @@
+{
+  "configVersion": "v2",
+  "app": {
+    "appId": 25107,
+    "appName": "ZeppOSShowcase",
+    "appType": "app",
+    "version": {
+      "code": 1,
+      "name": "1.0.0"
+    },
+    "icon": "icon.png",
+    "vender": "zepp",
+    "description": "empty application"
+  },
+  "permissions": [
+    "data:os.device.info",
+    "data:user.hd.spo2",
+    "data:user.hd.calorie",
+    "data:user.hd.distance",
+    "data:user.hd.fat_burning",
+    "data:user.hd.heart_rate",
+    "data:user.hd.pai",
+    "data:user.hd.sleep",
+    "data:user.hd.stand",
+    "data:user.hd.step",
+    "data:user.hd.stress",
+    "device:os.geolocation"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "2.0",
+      "target": "2.0",
+      "minVersion": "2.1.0"
+    }
+  },
+  "targets": {
+    "454x454-amazfit-t-rex-2": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/index",
+            "page/sensor/blood_oxygen",
+            "page/sensor/calorie",
+            "page/sensor/distance",
+            "page/sensor/fat_burning",
+            "page/sensor/heart_rate",
+            "page/sensor/pai",
+            "page/sensor/sleep",
+            "page/sensor/stand",
+            "page/sensor/step",
+            "page/sensor/stress",
+            "page/sensor/geolocation",
+            "page/router/set_launch_app_timeout",
+            "page/interaction/on_digital_crown",
+            "page/interaction/on_wrist_motion",
+            "page/interaction/on_key",
+            "page/interaction/show_toast",
+            "page/interaction/create_modal",
+            "page/ui/widget/text",
+            "page/ui/widget/img",
+            "page/ui/widget/button",
+            "page/ui/widget/fill_rect",
+            "page/ui/widget/stroke_rect",
+            "page/ui/widget/arc",
+            "page/ui/widget/img_anim",
+            "page/ui/widget/qrcode",
+            "page/ui/widget/dialog",
+            "page/ui/widget/histogram",
+            "page/ui/widget/polyline",
+            "page/ui/widget/radio_group",
+            "page/ui/widget/checkbox_group",
+            "page/ui/widget/slide_switch",
+            "page/ui/widget/pick_date",
+            "page/ui/widget/scroll_list",
+            "page/ui/widget/view_container",
+            "page/ui/widget/cycle_list",
+            "page/ui/widget/cycle_image_text_list"
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "name": "Teide",
+          "deviceSource": 418
+        },
+        {
+          "name": "Teidew",
+          "deviceSource": 419
+        }
+      ],
+      "designWidth": 454
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "ZeppOSShowcase"
+    }
+  },
+  "defaultLanguage": "en-US"
+}
