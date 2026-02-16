@@ -3,8 +3,8 @@ import { DEFAULT_TODO_LIST } from './../utils/constants'
 const messageBuilder = new MessageBuilder()
 
 // NSE API configuration
-const NSE_BASE_URL = 'https://www.nseindia.com/api'
-const DEFAULT_SYMBOL = 'RELIANCE' // You can change this to any NSE symbol
+const NSE_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart'
+const DEFAULT_SYMBOL = 'RELIANCE.NS' // You can change this to any NSE symbol
 
 function getTodoList() {
   return settings.settingsStorage.getItem('todoList')
@@ -14,9 +14,9 @@ function getTodoList() {
 
 // Fetch stock data directly from NSE
 function fetchStockData(symbol = DEFAULT_SYMBOL) {
-  console.log(`Fetching NSE data for ${symbol}...`)
+  console.log(`Fetching Yahoo Finance data for ${symbol}...`)
   
-  const url = `${NSE_BASE_URL}/quote-equity?symbol=${symbol}`
+  const url = `${NSE_BASE_URL}/${symbol}?interval=1d&range=1d`
   
   fetch(url, {
     method: 'GET',
@@ -34,44 +34,42 @@ function fetchStockData(symbol = DEFAULT_SYMBOL) {
       return response.json()
     })
     .then(data => {
-      console.log('NSE Data received:', data)
+      console.log('Raw Yahoo Finance data received')
       
-      // Extract relevant stock information
-      const stockInfo = {
-        symbol: data.info?.symbol || symbol,
-        companyName: data.info?.companyName || 'N/A',
-        lastPrice: data.priceInfo?.lastPrice || 0,
-        change: data.priceInfo?.change || 0,
-        pChange: data.priceInfo?.pChange || 0,
-        open: data.priceInfo?.open || 0,
-        high: data.priceInfo?.intraDayHighLow?.max || 0,
-        low: data.priceInfo?.intraDayHighLow?.min || 0,
-        previousClose: data.priceInfo?.previousClose || 0,
-        timestamp: new Date().toISOString()
+      const result = data.chart?.result?.[0]
+      const meta = result?.meta
+      const quote = result?.indicators?.quote?.[0]
+      
+      if (!meta || !quote) {
+        throw new Error('Invalid response structure')
       }
       
-      console.log('Processed stock info:', stockInfo)
+      const lastPrice = meta.regularMarketPrice || quote.close[0] || 0
+      const formattedPrice = parseFloat(lastPrice.toFixed(2))
+      
+      console.log('Current stock price:', formattedPrice)
       
       // Store in settings
-      settings.settingsStorage.setItem('stockData', JSON.stringify(stockInfo))
+      settings.settingsStorage.setItem('stockData', JSON.stringify({ lastPrice: formattedPrice }))
+      
+      // Send only the price as a single-item array
+      const displayData = [`₹${formattedPrice}`]
+      
+      console.log('Sending price to watch:', displayData)
       
       // Send to watch
-      messageBuilder.call({ 
-        type: 'STOCK_UPDATE',
-        data: stockInfo 
-      })
+      messageBuilder.call(displayData)
+      
+      // Update todoList in settings
+      settings.settingsStorage.setItem('todoList', JSON.stringify(displayData))
+      
+      console.log('Stock price sent to watch')
     })
     .catch(error => {
-      console.log('NSE fetch error:', error.message)
-      
-      // Send error to watch
-      messageBuilder.call({ 
-        type: 'STOCK_ERROR',
-        error: error.message 
-      })
+      console.log('Yahoo Finance fetch error:', error.message)
+      messageBuilder.call([`Error: ${error.message}`])
     })
 }
-
 // Alternative: Fetch multiple stocks
 function fetchMultipleStocks(symbols = ['RELIANCE', 'TCS', 'INFY']) {
   console.log('Fetching multiple stocks:', symbols)
