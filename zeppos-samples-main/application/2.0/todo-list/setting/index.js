@@ -1,40 +1,109 @@
 import { gettext } from 'i18n'
 import { DEFAULT_TODO_LIST } from './../utils/constants'
+
 AppSettingsPage({
   state: {
     todoList: [],
+    stockSymbol: '',
     props: {}
   },
+
+  /* -------------------- TODO METHODS -------------------- */
+
   addTodoList(val) {
     this.state.todoList = [...this.state.todoList, val]
-    this.setItem()
+    this.setTodoItem()
   },
+
   editTodoList(val, index) {
     this.state.todoList[index] = val
-    this.setItem()
+    this.setTodoItem()
   },
+
   deleteTodoList(index) {
-    this.state.todoList = this.state.todoList.filter((_, ind) => {
-      return ind !== index
-    })
-    this.setItem()
+    this.state.todoList = this.state.todoList.filter((_, ind) => ind !== index)
+    this.setTodoItem()
   },
-  setItem() {
+
+  setTodoItem() {
     const newString = JSON.stringify(this.state.todoList)
     this.state.props.settingsStorage.setItem('todoList', newString)
   },
+
+  /* -------------------- STOCK METHODS -------------------- */
+
+  setStockSymbol(val) {
+    if (!val || val.trim().length === 0) return
+
+    const formatted = val.trim().toUpperCase()
+
+    this.state.stockSymbol = formatted
+    this.state.props.settingsStorage.setItem('stockSymbol', formatted)
+  },
+
+  /* -------------------- INITIAL STATE LOAD -------------------- */
+
   setState(props) {
     this.state.props = props
+
+    // Load todo list
     if (props.settingsStorage.getItem('todoList')) {
-      this.state.todoList = JSON.parse(props.settingsStorage.getItem('todoList'))
+      this.state.todoList = JSON.parse(
+        props.settingsStorage.getItem('todoList')
+      )
     } else {
       this.state.todoList = [...DEFAULT_TODO_LIST]
     }
-    console.log('todoList: ', this.state.todoList)
+
+    // Load stock symbol
+    if (props.settingsStorage.getItem('stockSymbol')) {
+      this.state.stockSymbol =
+        props.settingsStorage.getItem('stockSymbol')
+    } else {
+      this.state.stockSymbol = 'RELIANCE'
+    }
+
+    console.log('Loaded todoList:', this.state.todoList)
+    console.log('Loaded stockSymbol:', this.state.stockSymbol)
   },
+
+  /* -------------------- UI BUILD -------------------- */
+
   build(props) {
     this.setState(props)
+
     const contentItems = []
+
+    /* -------- STOCK SECTION -------- */
+
+    const stockSection = View(
+      {
+        style: {
+          marginBottom: '20px',
+          padding: '12px',
+          border: '1px solid #eaeaea',
+          borderRadius: '8px',
+          backgroundColor: 'white'
+        }
+      },
+      [
+        TextInput({
+          label: 'NSE Stock Symbol',
+          value: this.state.stockSymbol,
+          subStyle: {
+            color: '#333',
+            fontSize: '14px'
+          },
+          maxLength: 20,
+          onChange: (val) => {
+            this.setStockSymbol(val)
+          }
+        })
+      ]
+    )
+
+    /* -------- ADD TODO BUTTON -------- */
+
     const addBTN = View(
       {
         style: {
@@ -57,6 +126,9 @@ AppSettingsPage({
         })
       ]
     )
+
+    /* -------- EXISTING TODO LIST -------- */
+
     this.state.todoList.forEach((item, index) => {
       contentItems.push(
         View(
@@ -76,7 +148,6 @@ AppSettingsPage({
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'row',
-                  justfyContent: 'center',
                   alignItems: 'center'
                 }
               },
@@ -94,7 +165,9 @@ AppSettingsPage({
                     if (val.length > 0 && val.length <= 200) {
                       this.editTodoList(val, index)
                     } else {
-                      console.log("todoList can't be empty or too long!")
+                      console.log(
+                        "todoList can't be empty or too long!"
+                      )
                     }
                   }
                 })
@@ -116,6 +189,9 @@ AppSettingsPage({
         )
       )
     })
+
+    /* -------- FINAL RETURN -------- */
+
     return View(
       {
         style: {
@@ -123,6 +199,7 @@ AppSettingsPage({
         }
       },
       [
+        stockSection,
         addBTN,
         contentItems.length > 0 &&
           View(
