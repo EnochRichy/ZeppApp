@@ -3,279 +3,112 @@ import { DEFAULT_TODO_LIST } from './../utils/constants'
 
 const messageBuilder = new MessageBuilder()
 
-/* -------------------------------------------------------
-   CONFIG
-------------------------------------------------------- */
-
 const YAHOO_CHART_URL =
   'https://query1.finance.yahoo.com/v8/finance/chart'
 
-const YAHOO_QUOTE_URL =
-  'https://query1.finance.yahoo.com/v7/finance/quote'
-
-const DEFAULT_SYMBOL = 'RELIANCE.NS'
-
 let stockInterval = null
 
-/* -------------------------------------------------------
-   UTILITIES
-------------------------------------------------------- */
-
 function normalizeSymbol(symbol) {
-  if (!symbol) return DEFAULT_SYMBOL
   const clean = symbol.trim().toUpperCase()
   return clean.endsWith('.NS') ? clean : `${clean}.NS`
 }
 
-function getConfiguredSymbol() {
-  return normalizeSymbol(
-    settings.settingsStorage.getItem('stockSymbol') ||
-      DEFAULT_SYMBOL
-  )
+function getStockList() {
+  const raw = settings.settingsStorage.getItem('todoList')
+
+  if (!raw) return [...DEFAULT_TODO_LIST]
+
+  try {
+    const parsed = JSON.parse(raw)
+
+    if (Array.isArray(parsed)) {
+      return parsed
+    }
+
+    if (typeof parsed === 'string') {
+      return JSON.parse(parsed)
+    }
+
+    return [...DEFAULT_TODO_LIST]
+  } catch (e) {
+    console.log('Parse error:', e)
+    return [...DEFAULT_TODO_LIST]
+  }
 }
 
-function getTodoList() {
-  return settings.settingsStorage.getItem('todoList')
-    ? JSON.parse(settings.settingsStorage.getItem('todoList'))
-    : [...DEFAULT_TODO_LIST]
-}
+function fetchSingleStock(symbol) {
+  const finalSymbol = normalizeSymbol(symbol)
+  const url = `${YAHOO_CHART_URL}/${finalSymbol}?interval=1d&range=1d`
 
-/* -------------------------------------------------------
-   FETCH SINGLE STOCK
-------------------------------------------------------- */
-
-function fetchStockData(symbolInput) {
-  const symbol = normalizeSymbol(symbolInput)
-
-  console.log(`Fetching stock for ${symbol}`)
-
-  const url = `${YAHOO_CHART_URL}/${symbol}?interval=1d&range=1d`
-
-  fetch(url)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-      return response.json()
-    })
-    .then((data) => {
+  return fetch(url)
+    .then(res => res.json())
+    .then(data => {
       const result = data.chart?.result?.[0]
       const meta = result?.meta
 
       if (!meta || meta.regularMarketPrice == null) {
-        throw new Error('Invalid API response')
+        return null
       }
 
-      const price = parseFloat(
-        meta.regularMarketPrice.toFixed(2)
-      )
+      const price = meta.regularMarketPrice.toFixed(2)
+      const change = meta.regularMarketChangePercent?.toFixed(2) || '0.00'
 
-      console.log(`Price for ${symbol}: ₹${price}`)
-
-      // Store clean stock data (no todo mixing)
-      settings.settingsStorage.setItem(
-        'stockData',
-        JSON.stringify({
-          symbol,
-          lastPrice: price,
-          updatedAt: Date.now()
-        })
-      )
-
-      // Send to watch
-      messageBuilder.call([`₹${price}`])
+      return `${symbol.toUpperCase()}  ₹${price}  ${change}%`
     })
-    .catch((err) => {
-      console.log('Fetch error:', err.message)
-
-      messageBuilder.call({
-        type: 'STOCK_ERROR',
-        error: err.message
-      })
-    })
+    .catch(() => null)
 }
 
-/* -------------------------------------------------------
-   FETCH MULTIPLE STOCKS (CORRECT ENDPOINT)
-------------------------------------------------------- */
+function fetchAllStocks() {
+  const symbols = getStockList()
 
-function fetchMultipleStocks(symbols = []) {
-  if (!Array.isArray(symbols) || symbols.length === 0)
+  if (!symbols || symbols.length === 0) {
+    messageBuilder.call([])
     return
+  }
 
-  const formattedSymbols = symbols
-    .map((s) => normalizeSymbol(s))
-    .join(',')
-
-  const url = `${YAHOO_QUOTE_URL}?symbols=${formattedSymbols}`
-
-  fetch(url)
-    .then((res) => res.json())
-    .then((data) => {
-      const results = data.quoteResponse?.result || []
-
-      const stocksData = results.map((item) => ({
-        symbol: item.symbol,
-        price: item.regularMarketPrice,
-        change: item.regularMarketChangePercent
-      }))
-
-      settings.settingsStorage.setItem(
-        'stocksData',
-        JSON.stringify(stocksData)
-      )
-
-      messageBuilder.call({
-        type: 'STOCKS_UPDATE',
-        data: stocksData
-      })
-    })
-    .catch((err) => {
-      console.log('Multi-stock fetch error:', err.message)
+  Promise.all(symbols.map(s => fetchSingleStock(s)))
+    .then(results => {
+      const displayData = results.filter(r => r !== null)
+      messageBuilder.call(displayData)
     })
 }
-
-/* -------------------------------------------------------
-   APP SIDE SERVICE
-------------------------------------------------------- */
 
 AppSideService({
   onInit() {
-    console.log('App-side initialized')
+  messageBuilder.listen(() => {})
 
-    messageBuilder.listen(() => {})
+  // Handle manual refresh request
+  messageBuilder.on('request', (ctx) => {
+    const payload = messageBuilder.buf2Json(ctx.request.payload)
 
-    // Listen for settings changes
-    settings.settingsStorage.addListener(
-      'change',
-      ({ key, newValue }) => {
-        if (key === 'stockSymbol') {
-          fetchStockData(newValue)
-        }
+    if (payload.method === 'REFRESH_STOCKS') {
+      console.log('Manual refresh triggered')
 
-        if (key === 'todoList') {
-          messageBuilder.call({
-            type: 'TODO_UPDATE',
-            data: getTodoList()
-          })
-        }
-      }
-    )
+      fetchAllStocks()
 
-    /* ---------------- MESSAGE HANDLER ---------------- */
+      ctx.response({
+        data: { result: 'OK' }
+      })
+    }
+  })
 
-    messageBuilder.on('request', (ctx) => {
-      const payload = messageBuilder.buf2Json(
-        ctx.request.payload
-      )
-
-      switch (payload.method) {
-        case 'GET_TODO_LIST':
-          ctx.response({
-            data: { result: getTodoList() }
-          })
-          break
-
-        case 'ADD': {
-          const list = getTodoList()
-          const newList = [
-            ...list,
-            String(Math.floor(Math.random() * 100))
-          ]
-          settings.settingsStorage.setItem(
-            'todoList',
-            JSON.stringify(newList)
-          )
-          ctx.response({
-            data: { result: newList }
-          })
-          break
-        }
-
-        case 'DELETE': {
-          const { index } = payload.params || {}
-          const list = getTodoList()
-          const newList = list.filter((_, i) => i !== index)
-          settings.settingsStorage.setItem(
-            'todoList',
-            JSON.stringify(newList)
-          )
-          ctx.response({
-            data: { result: newList }
-          })
-          break
-        }
-
-        case 'GET_STOCK_DATA': {
-          const stockData =
-            settings.settingsStorage.getItem('stockData')
-          ctx.response({
-            data: {
-              result: stockData
-                ? JSON.parse(stockData)
-                : null
-            }
-          })
-          break
-        }
-
-        case 'FETCH_STOCK_NOW': {
-          fetchStockData(
-            payload.params?.symbol ||
-              getConfiguredSymbol()
-          )
-          ctx.response({
-            data: { result: 'Fetching...' }
-          })
-          break
-        }
-
-        case 'SET_STOCK_SYMBOL': {
-          const symbol = payload.params?.symbol
-          if (symbol) {
-            settings.settingsStorage.setItem(
-              'stockSymbol',
-              symbol
-            )
-            fetchStockData(symbol)
-            ctx.response({
-              data: { result: 'Symbol updated' }
-            })
-          }
-          break
-        }
-
-        case 'FETCH_MULTIPLE_STOCKS': {
-          fetchMultipleStocks(payload.params?.symbols)
-          ctx.response({
-            data: { result: 'Fetching multiple...' }
-          })
-          break
-        }
-
-        default:
-          ctx.response({
-            data: { result: 'Unknown method' }
-          })
-      }
-    })
-  },
+  // Handle settings change
+  settings.settingsStorage.addListener(({ key }) => {
+    if (key === 'todoList') {
+      fetchAllStocks()
+    }
+  })
+},
 
   onRun() {
-    console.log('App-side running')
+    fetchAllStocks()
 
-    // Immediate fetch
-    fetchStockData(getConfiguredSymbol())
-
-    // Periodic refresh
     stockInterval = setInterval(() => {
-      fetchStockData(getConfiguredSymbol())
+      fetchAllStocks()
     }, 30000)
   },
 
   onDestroy() {
-    console.log('App-side destroyed')
-
     if (stockInterval) {
       clearInterval(stockInterval)
       stockInterval = null
